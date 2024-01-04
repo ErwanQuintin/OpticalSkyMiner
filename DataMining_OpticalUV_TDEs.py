@@ -16,14 +16,28 @@ rc('text', usetex=True)
 rc('font', **{'family': 'serif', 'serif': ['Computer Modern Roman']})
 
 
-
+#This laods the OM, UVOT and GALEX sources that match a GLADE+ galaxy. You can set the option to False, to load all
+#of them, but it will be slower
 dic_master_sources = load_master_sources(only_galaxies=True)
 
-tab_to_plot=[]
-for ms in dic_master_sources.values():
-    if len(ms.optical_sources.keys())>2:
-        tab_to_plot.append(ms)
-tab_to_plot[10].plot_lightcurve()
+"""
+The sources we will look through are called MasterSources. They are the combination of optical/UV sources from the 
+OM, UVOT and GALEX catalogs. To access them, loop on the values of "dic_master_sources" dictionary 
+(so: for master_source in dic_master_sources.values():)
+
+They have properties that you will have to use:
+master_source.optical_var is a list containing the variability in each of the six bands
+master_source.optical_max_lower (and .optical_min_upper) are the maximum and minimum of all the fluxes, for each band. 
+master_source.glade_distance is the distance to the GLADE galaxy, in Mpc. This is used to convert fluxes to 
+luminosity: for instance, the maximum luminosity in each band is given by 
+ms.optical_max_lower[band]*ms.flux_lum_conv_factor*band_width[catalog][band] where band is in [0:6[ and catalogs is in 
+{OM,UVOT}
+master_source.sources will give you access to the optical sources (OM, UVOT, GALEX). This can be used to retrieve the 
+individual detections
+
+The most useful function will be master_source.plot_lightcurve(). It will plot the lightcurve of the source, its
+spectrum, and two images. This will allow you to quickly assess the quality of a TDE candidate
+"""
 
 def compare_GALEX_to_OM_UVOT():
     """This function will compare the GALEX NUV flux to any UV flux from OM or UVOT, allowing to check for the
@@ -88,3 +102,23 @@ def band_GLADE_luminosities():
         ax.loglog()
     plt.show()
 
+def select_TDE_candidates():
+    """This function is used to select the best-looking TDE candidates. This is what will need to be adapted / improved
+    """
+    tab_candidates=[]
+    for ms in tqdm(dic_master_sources.values()):
+        is_good_candidate=False
+        if not np.isnan(ms.glade_distance):
+            for ind_band in range(6):
+                if not np.isnan(ms.optical_max_lower[ind_band]):
+                    peak_luminosity = ms.optical_max_lower[ind_band]*ms.flux_lum_conv_factor*band_width['OM'][ind_band]
+                    variability = ms.optical_var[ind_band]
+                    if 1e42<peak_luminosity and variability>50:
+                        is_good_candidate=True
+        if is_good_candidate:
+            tab_candidates.append(ms)
+    print("Number of candidates:", len(tab_candidates))
+    tab_candidates[20].plot_lightcurve()
+    # for ms in tab_candidates:
+    #     ms.plot_lightcurve()
+    #     plt.show()

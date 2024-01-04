@@ -50,12 +50,34 @@ band_center = {"OM":[2120,2310,2910,3440,4500,5430],
                "UVOT":[2120,2310,2910,3440,4500,5430],
                "GALEX":[1565,2300]}
 band_width = {"OM":[500,480,830,840,1050,700],
-               "UVOT":[100,200,250,500,500,500],
+               "UVOT":[500,480,830,840,1050,700],
                "GALEX":[440,1120]}
 
 optical_effective_wavelengths=[2120,2310,2910,3440,4500,5430] #In Angstroms, used to convert from erg/s/cm2/angstroms to erg/s/cm2
 
 path_to_catalogs = os.path.join(os.getcwd(),"OpticalCatalogs")
+
+def click_action(ra, dec, om_obsids, uvot_obsids):
+    url_esaskyDSS = "http://sky.esa.int/?target="+str(np.round(ra,4))+" "+str(np.round(dec,4))+"&hips=DSS2+color&fov=0.1&cooframe=J2000&sci=true&lang=en"
+    url_esaskyXMM = "http://sky.esa.int/?target=" + str(np.round(ra, 4)) + " " + str(
+        np.round(dec, 4)) + "&hips=XMM-Newton+EPIC+color&fov=0.1&cooframe=J2000&sci=true&lang=en"
+    url_esaskyChandra = "http://sky.esa.int/?target=" + str(np.round(ra, 4)) + " " + str(
+        np.round(dec, 4)) + "&hips=Chandra+RGB&fov=0.1&cooframe=J2000&sci=true&lang=en"
+    url_simbad = "http://simbad.u-strasbg.fr/simbad/sim-coo?Coord="+str(ra)+"+"+str(dec)+"&Radius=1&Radius.unit=arcmin&submit=submit+query"
+    url_xmm = f"http://xmm-catalog.irap.omp.eu/sources?f={ra}%20{dec}"
+    webbrowser.get('firefox').open(url_simbad)
+    webbrowser.get('firefox').open(url_esaskyDSS, new=0)
+    webbrowser.get('firefox').open(url_esaskyXMM, new=0)
+    webbrowser.get('firefox').open(url_esaskyChandra, new=0)
+    webbrowser.get('firefox').open(url_xmm, new=0)
+    for om_obsid in om_obsids:
+        url_om = f"http://nxsa.esac.esa.int/nxsa-web/#obsid={om_obsid}"
+        webbrowser.get('firefox').open(url_om, new=0)
+    # for uvot_obsid in uvot_obsids:
+    #     url_uvot = f"http://nxsa.esac.esa.int/nxsa-web/#obsid={om_obsid}"
+    #     webbrowser.get('firefox').open(url_uvot, new=0)
+
+
 
 class OpticalSource:
     """
@@ -78,7 +100,7 @@ class OpticalSource:
         self.band_flux = band_flux
         self.band_fluxerr=band_fluxerr
         self.timesteps=[float(elt) for elt in timesteps]
-        self.obsids = [int(obsid) for obsid in obsids]
+        self.obsids = obsids
 
 class MasterSource:
     """
@@ -107,11 +129,13 @@ class MasterSource:
         self.pos_err = float(poserr)
 
         self.optical_sources={}
+        self.optical_obsids={"OM":[],"UVOT":[]}
         self.optical_min_upper = [1,1,1,1,1,1]
         self.optical_var = [1, 1, 1, 1, 1, 1]
         self.optical_max_lower = [0,0,0,0,0,0]
         for opt_source in tab_optical_sources:
             self.optical_sources[opt_source.catalog]=opt_source
+            self.optical_obsids[opt_source.catalog]=opt_source.obsids
             opt_source.master_source = self
             if len(opt_source.band_flux)>0:
                 if opt_source.catalog!='GALEX':
@@ -144,7 +168,10 @@ class MasterSource:
         else:
             fig, [ax1, ax2] = plt.subplots(1,2, figsize=(10,10))
 
-        # plt.suptitle(f'Simbad type: {self.simbad_type}   -   More details', picker=True, bbox=dict(facecolor=(180 / 256., 204 / 256., 252 / 256.)))
+        plt.suptitle(f'More details', picker=True, bbox=dict(facecolor=(180 / 256., 204 / 256., 252 / 256.)))
+        fig.canvas.mpl_connect('pick_event', lambda event: click_action(self.ra, self.dec,
+                                                                        self.optical_obsids['OM'],
+                                                                        self.optical_obsids['UVOT']))
 
         optical_band_observed={"UVW2":False,"UVM2":False,"UVW1":False,"U":False,"B":False,"V":False}
         for cat in optical_catalogs:
@@ -265,8 +292,10 @@ def load_optical_source(cat):
     #We divide up the catalog in sub-samples corresponding to each source
     if cat!='GALEX':
         timesteps = np.split(np.array(sources_raw[time_names[cat]]), indices_for_source)
+        obsids = np.split(np.array(sources_raw['OBSID']), indices_for_source)
     else:
         timesteps = np.split(np.array([54101 for line in sources_raw]), indices_for_source) #Time is set at January 1st 2007 for all GALEX data
+        obsids = np.split(np.array([0 for line in sources_raw]), indices_for_source) #OBSID is set to 0
     names = np.split(np.array(sources_raw[src_names[cat]]), indices_for_source)
 
     band_fluxes = []
@@ -284,8 +313,9 @@ def load_optical_source(cat):
 
     #This loops on all sources, to build the Source objects
     pbar=tqdm(total=len(band_fluxes))
-    for (index, time, name, band_flux, band_fluxerr) in zip(range(len(band_fluxes)), timesteps, names, band_fluxes, band_flux_errors):
-        source = OpticalSource(cat, name[0].strip(), time, band_flux, band_fluxerr)
+    for (index, time, name, band_flux, band_fluxerr, obsid) in (
+            zip(range(len(band_fluxes)), timesteps, names, band_fluxes, band_flux_errors, obsids)):
+        source = OpticalSource(cat, name[0].strip(), time, band_flux, band_fluxerr, obsid)
         dic_sources[name[0].strip()] = source
         pbar.update(1)
     pbar.close()
