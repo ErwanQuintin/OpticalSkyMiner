@@ -113,7 +113,7 @@ def select_TDE_candidates():
                 if not np.isnan(ms.optical_max_lower[ind_band]):
                     peak_luminosity = ms.optical_max_lower[ind_band]*ms.flux_lum_conv_factor*band_width['OM'][ind_band]
                     variability = ms.optical_var[ind_band]
-                    if 1e42<peak_luminosity and variability>50:
+                    if 1e42<peak_luminosity and variability>5:
                         is_good_candidate=True
         if is_good_candidate:
             tab_candidates.append(ms)
@@ -122,3 +122,22 @@ def select_TDE_candidates():
     # for ms in tab_candidates:
     #     ms.plot_lightcurve()
     #     plt.show()
+
+def load_known_TDEs():
+    """This function loads the known TDEs"""
+    raw_data = fits.open(os.path.join(path_to_catalogs,"KnownTDEs.fits"), memmap=True)
+    sources_raw = raw_data[1].data
+    sources_raw = Table(sources_raw)
+    for ms in dic_master_sources.values():
+        ms.known_tde = False
+    for ms_id in sources_raw["MS_ID"]:
+        dic_master_sources[ms_id].known_tde = True
+    print("Loaded known TDEs !")
+
+def plot_known_TDEs():
+    for ms in tqdm(dic_master_sources.values()):
+        if ms.known_tde:
+            ms.plot_lightcurve()
+
+load_known_TDEs()
+plot_known_TDEs()
